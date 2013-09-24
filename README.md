@@ -1,3 +1,3 @@
-This is the start of a runkeeper command-line interface.
+This is the start of a heath tools command-line interface.
 
-Currently, only util methods exist
+Currently, only util methods exist, and only interfaces with Runkeeper

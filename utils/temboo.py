@@ -2,9 +2,9 @@
 
 # Copyright 2013 Patrick Connelly <patrick@deadlypenguin.com> 
 #
-# This file is part of RunkeeperCLI
+# This file is part of healthTools 
 #
-# RunkeeperCLI is free software; you can redistribute it and/or
+# healthTools is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
@@ -18,7 +18,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
-"""This class is used to send data to Runkeeper via Temboo"""
+"""This class is used to send data via Temboo"""
 
 __author__ = "Patrick Connelly (patrick@deadlypenguin.com)"
 __version__ = "1.0-0"
@@ -30,10 +30,9 @@ import base64
 import urllib2
 import httplib
 import argparse
-import GPXtoRKJSON
+import gpx 
 import ConfigParser
 
-CFG_SECTION = 'temboo'
 CFG_KEY_NAME = 'app_key_name'
 CFG_KEY_VALUE = 'app_key_value'
 CFG_ACCT = 'account_name'
@@ -47,6 +46,12 @@ KEY_ACTIVITY = 'Activity'
 KEY_STATUS = 'status'
 KEY_EXEC = 'execution'
 
+TO_RUNKEEPER = 'runkeeper'
+TO_TYPES = [TO_RUNKEEPER]
+
+VIA_TEMBOO = 'temboo'
+VIA_TYPES = [VIA_TEMBOO]
+
 def create_config(fname):
     if os.path.isfile(fname):
         print "Config file '%s' already exists" % (fname,)
@@ -56,11 +61,11 @@ def create_config(fname):
     try:
         config.readfp(open(fname))
     except IOError:
-        config.add_section(CFG_SECTION)
-        config.set(CFG_SECTION, CFG_KEY_NAME, 'APP_KEY_NAME')
-        config.set(CFG_SECTION, CFG_KEY_VALUE, 'APP_KEY_VALUE')
-        config.set(CFG_SECTION, CFG_ACCT, 'ACCOUNT_NAME')
-        config.set(CFG_SECTION, CFG_PRESET, 'PRESET_NAME')
+        config.add_section(VIA_TEMBOO)
+        config.set(VIA_TEMBOO, CFG_KEY_NAME, 'APP_KEY_NAME')
+        config.set(VIA_TEMBOO, CFG_KEY_VALUE, 'APP_KEY_VALUE')
+        config.set(VIA_TEMBOO, CFG_ACCT, 'ACCOUNT_NAME')
+        config.set(VIA_TEMBOO, CFG_PRESET, 'PRESET_NAME')
 
         root_dir = os.path.dirname(fname)
 
@@ -70,16 +75,16 @@ def create_config(fname):
         with open(fname, 'wb') as configfile:
             config.write(configfile)
 
-def send_to_temboo(data, config):
-    base64string = base64.encodestring('%s:%s' % (config.get(CFG_SECTION, CFG_KEY_NAME), config.get(CFG_SECTION, CFG_KEY_VALUE))).replace('\n', '')
+def send_to_rktemboo(data, config):
+    base64string = base64.encodestring('%s:%s' % (config.get(VIA_TEMBOO, CFG_KEY_NAME), config.get(VIA_TEMBOO, CFG_KEY_VALUE))).replace('\n', '')
 
     headers = {}
     headers['Content-Type'] = 'application/json'
     headers['Accept'] = 'application/json'
-    headers['x-temboo-domain'] = "/%s/master" % (config.get(CFG_SECTION, CFG_ACCT),)
+    headers['x-temboo-domain'] = "/%s/master" % (config.get(VIA_TEMBOO, CFG_ACCT),)
     headers['Authorization'] = "Basic %s" % (base64string,)
 
-    url = "https://%s.temboolive.com/temboo-api/1.0/choreos/Library/RunKeeper/FitnessActivities/RecordActivity" % (config.get(CFG_SECTION, CFG_ACCT))
+    url = "https://%s.temboolive.com/temboo-api/1.0/choreos/Library/RunKeeper/FitnessActivities/RecordActivity" % (config.get(VIA_TEMBOO, CFG_ACCT))
 
     try:
         request = urllib2.Request(url, json.dumps(data), headers)
@@ -104,13 +109,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A tool to convert from GPX to RunKeeper via Temboo')
 
     parser.add_argument('-i', '--input', action='store', help='The input file', dest='input_file', metavar='INPUTFILE', required=True)
-    parser.add_argument('-c', '--config', action='store', help='The config location', dest='config_file', metavar='CONFIGFILE', default='~/.temboo/runkeeper.conf')
+    parser.add_argument('-c', '--config', action='store', help='The config location', dest='config_file', metavar='CONFIGFILE')
+    parser.add_argument('-t', '--to', action='store', help='What service to push to', dest='whereto', default=TO_RUNKEEPER, choices=TO_TYPES)
+    parser.add_argument('--via', action='store', help='How to send data', dest='via', default=VIA_TEMBOO, choices=VIA_TYPES)
 
     args = parser.parse_args()
 
     if not os.path.isfile(args.input_file):
         print "Input file '%s' does not exist" % (args.input_file,)
         sys.exit(-1)
+
+    if not args.config_file:
+        args.config_file = '~/.healthtools/%s.conf' % (args.whereto)
 
     if not os.path.isfile(os.path.expanduser(args.config_file)):
         print "Config file '%s' does not exist" % (os.path.expanduser(args.config_file),)
@@ -126,10 +136,13 @@ if __name__ == "__main__":
     ifp.close()
 
     data = {}
-    data[KEY_PRESET] = config.get(CFG_SECTION, CFG_PRESET) 
-    data[KEY_INPUTS] = []
-    activity = {}
-    activity[KEY_NAME] = KEY_ACTIVITY
-    activity[KEY_VALUE] = json.dumps(GPXtoRKJSON.convert_gpx(gpx_data))
-    data[KEY_INPUTS].append(activity)
-    send_to_temboo(data, config)
+
+    if args.whereto == TO_RUNKEEPER:
+        if args.via == VIA_TEMBOO:
+            data[KEY_PRESET] = config.get(VIA_TEMBOO, CFG_PRESET) 
+            data[KEY_INPUTS] = []
+            activity = {}
+            activity[KEY_NAME] = KEY_ACTIVITY
+            activity[KEY_VALUE] = json.dumps(gpx.convert_gpx_to_rkjson(gpx_data))
+            data[KEY_INPUTS].append(activity)
+            send_to_rktemboo(data, config)

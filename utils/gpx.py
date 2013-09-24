@@ -2,9 +2,9 @@
 
 # Copyright 2013 Patrick Connelly <patrick@deadlypenguin.com> 
 #
-# This file is part of RunkeeperCLI
+# This file is part of healthTools
 #
-# RunkeeperCLI is free software; you can redistribute it and/or
+# healthTools is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
@@ -18,16 +18,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
-"""This class is used to convert GPX files to Runkeeper's JSON format"""
+"""This class is used to convert GPX files to various formats"""
 
 __author__ = "Patrick Connelly (patrick@deadlypenguin.com)"
-__version__ = "1.0-0"
+__version__ = "1.1-0"
 
 import os
 import sys
 import json
 import argparse
 from lxml import etree
+from dateutil import tz
 from dateutil.parser import parse
 
 KEY_TYPE = 'type'
@@ -44,30 +45,36 @@ KEY_TWIT = 'post_to_twitter'
 
 NAMESPACE = {'ns': 'http://www.topografix.com/GPX/1/1'}
 
+TYPE_RK = 'runkeeper'
+
+OUTPUT_TYPES = [TYPE_RK]
+
 DEFAULT_DATA = {
-    KEY_TYPE: 'Running',
-    KEY_EQUIPMENT: 'None',
-    KEY_NOTES: '',
-    KEY_FB: False,
-    KEY_TWIT: False
+    TYPE_RK: {
+        KEY_TYPE: 'Running',
+        KEY_EQUIPMENT: 'None',
+        KEY_NOTES: '',
+        KEY_FB: False,
+        KEY_TWIT: False
+    }
 }
 
-def enrich_data(jdata, additional_data):
+def enrich_data(jdata, additional_data, data_type):
     for key in additional_data:
         if not key in jdata:
             jdata[key] = additional_data[key]
-    for key in DEFAULT_DATA:
+    for key in DEFAULT_DATA[data_type]:
         if not key in jdata:
-            jdata[key] = DEFAULT_DATA[key]
+            jdata[key] = DEFAULT_DATA[data_type][key]
 
-def convert_gpx(data, additional_data={}):
+def convert_gpx_to_rkjson(data, additional_data={}):
     jdata = {}
     jdata[KEY_PATH] = []
 
     tree = etree.fromstring(data)
 
     start_time = parse(tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)[0].text)
-    jdata[KEY_STARTTIME] = start_time.strftime('%a, %d %b %Y %H:%M:%S')
+    jdata[KEY_STARTTIME] = start_time.astimezone(tz.tzlocal()).strftime('%a, %d %b %Y %H:%M:%S')
 
     for point in tree.xpath("//ns:trk//ns:trkseg//ns:trkpt", namespaces=NAMESPACE):
         path_point = {}
@@ -85,11 +92,11 @@ def convert_gpx(data, additional_data={}):
 
         jdata[KEY_PATH].append(path_point)
 
-        enrich_data(jdata, additional_data)
+        enrich_data(jdata, additional_data, TYPE_RK)
 
     return jdata
 
-def convert_file(ifile, ofile, force=False, additional_data={}):
+def convert_file(ifile, ofile, force=False, additional_data={}, format_type=TYPE_RK):
     if not os.path.isfile(ifile):
         print "Input file '%s' does not exist" % (ifile,)
         sys.exit(-1)
@@ -100,20 +107,24 @@ def convert_file(ifile, ofile, force=False, additional_data={}):
 
     ifp = open(ifile, 'r')
     ofp = open(ofile, 'w')
+    odata = ''
 
-    jdata = convert_gpx(ifp.read(), additional_data=additional_data)
+    if format_type == TYPE_RK:
+        jdata = convert_gpx_to_rkjson(ifp.read(), additional_data=additional_data)
+        odata = json.dumps(jdata)
 
-    ofp.write(json.dumps(jdata))
+    ofp.write(odata)
 
     ifp.close()
     ofp.close()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='A tool to convert from GPX to RunKeeper\'s json format')
+    parser = argparse.ArgumentParser(description='A tool to convert from GPX to various formats')
 
     parser.add_argument('-i', action='store', help='The input file', dest='input_file', metavar='INPUTFILE', required=True)
     parser.add_argument('-o', action='store', help='The output file', dest='output_file', metavar='OUTPUTFILE', required=True)
     parser.add_argument('-f', action='store_true', help='Force overwriting output file', dest='force')
+    parser.add_argument('--outputtype', action='store', help='The output type', dest='output_type', required=False, default=TYPE_RK, choices=OUTPUT_TYPES)
 
     args = parser.parse_args()
     convert_file(args.input_file, args.output_file, force=args.force)
