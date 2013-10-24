@@ -42,12 +42,19 @@ KEY_TIMESTAMP = 'timestamp'
 KEY_ALT = 'altitude'
 KEY_FB = 'post_to_facebook'
 KEY_TWIT = 'post_to_twitter'
+KEY_FEATURES = 'features'
+KEY_NAME = 'name'
+KEY_PROP = 'properties'
+KEY_TIME = 'time'
+KEY_GEO = 'geometry'
+KEY_COORDS = 'coordinates'
 
 NAMESPACE = {'ns': 'http://www.topografix.com/GPX/1/1'}
 
 TYPE_RK = 'runkeeper'
+TYPE_GEOJSON = 'geojson'
 
-OUTPUT_TYPES = [TYPE_RK]
+OUTPUT_TYPES = [TYPE_RK, TYPE_GEOJSON]
 
 DEFAULT_DATA = {
     TYPE_RK: {
@@ -96,6 +103,34 @@ def convert_gpx_to_rkjson(data, additional_data={}):
 
     return jdata
 
+def convert_gpx_to_geojson(data, additional_data={}):
+    jdata = {}
+    jdata[KEY_TYPE] = "FeatureCollection"
+    jdata[KEY_FEATURES] = []
+
+    feature = {}
+    feature[KEY_TYPE] = 'Feature'
+    feature[KEY_PROP] = {}
+    tree = etree.fromstring(data)
+
+    feature[KEY_PROP][KEY_NAME] = tree.xpath("//ns:trk//ns:name", namespaces=NAMESPACE)[0].text
+    start_time = parse(tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)[0].text)
+    feature[KEY_PROP][KEY_TIME] = start_time.astimezone(tz.tzlocal()).strftime('%a, %d %b %Y %H:%M:%S')
+
+    feature[KEY_GEO] = {}
+    feature[KEY_GEO][KEY_TYPE] = 'LineString'
+    feature[KEY_GEO][KEY_COORDS] = []
+
+    for point in tree.xpath("//ns:trk//ns:trkseg//ns:trkpt", namespaces=NAMESPACE):
+        path_point = []
+        path_point.append(float(point.get('lon')))
+        path_point.append(float(point.get('lat')))
+        feature[KEY_GEO][KEY_COORDS].append(path_point)
+
+    jdata[KEY_FEATURES].append(feature)
+
+    return jdata
+
 def convert_file(ifile, ofile, force=False, additional_data={}, format_type=TYPE_RK):
     if not os.path.isfile(ifile):
         print "Input file '%s' does not exist" % (ifile,)
@@ -112,6 +147,9 @@ def convert_file(ifile, ofile, force=False, additional_data={}, format_type=TYPE
     if format_type == TYPE_RK:
         jdata = convert_gpx_to_rkjson(ifp.read(), additional_data=additional_data)
         odata = json.dumps(jdata)
+    elif format_type == TYPE_GEOJSON:
+        jdata = convert_gpx_to_geojson(ifp.read(), additional_data=additional_data)
+        odata = json.dumps(jdata)
 
     ofp.write(odata)
 
@@ -127,4 +165,4 @@ if __name__ == "__main__":
     parser.add_argument('--outputtype', action='store', help='The output type', dest='output_type', required=False, default=TYPE_RK, choices=OUTPUT_TYPES)
 
     args = parser.parse_args()
-    convert_file(args.input_file, args.output_file, force=args.force)
+    convert_file(args.input_file, args.output_file, force=args.force, format_type=args.output_type)
