@@ -80,7 +80,17 @@ def convert_gpx_to_rkjson(data, additional_data={}):
 
     tree = etree.fromstring(data)
 
-    start_time = parse(tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)[0].text)
+    metadata_time = tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)
+
+    start_time = None
+
+    if len(metadata_time) > 0:
+        start_time = parse(metadata_time[0].text)
+    else:
+        first_time = tree.xpath("//ns:time", namespaces=NAMESPACE)
+        if len(first_time) > 0:
+            start_time = parse(first_time[0].text)
+
     jdata[KEY_STARTTIME] = start_time.astimezone(tz.tzlocal()).strftime('%a, %d %b %Y %H:%M:%S')
 
     for point in tree.xpath("//ns:trk//ns:trkseg//ns:trkpt", namespaces=NAMESPACE):
