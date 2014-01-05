@@ -80,9 +80,8 @@ def convert_gpx_to_rkjson(data, additional_data={}):
 
     tree = etree.fromstring(data)
 
-    metadata_time = tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)
-
     start_time = None
+    metadata_time = tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)
 
     if len(metadata_time) > 0:
         start_time = parse(metadata_time[0].text)
@@ -124,7 +123,18 @@ def convert_gpx_to_geojson(data, additional_data={}):
     tree = etree.fromstring(data)
 
     feature[KEY_PROP][KEY_NAME] = tree.xpath("//ns:trk//ns:name", namespaces=NAMESPACE)[0].text
-    start_time = parse(tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)[0].text)
+
+    start_time = None
+    metadata_time = tree.xpath("//ns:metadata//ns:time", namespaces=NAMESPACE)
+
+    if len(metadata_time) > 0:
+        start_time = parse(metadata_time[0].text)
+    else:
+        first_time = tree.xpath("//ns:time", namespaces=NAMESPACE)
+        if len(first_time) > 0:
+            start_time = parse(first_time[0].text)
+
+
     feature[KEY_PROP][KEY_TIME] = start_time.astimezone(tz.tzlocal()).strftime('%a, %d %b %Y %H:%M:%S')
 
     feature[KEY_GEO] = {}
